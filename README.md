@@ -1,6 +1,6 @@
 ## Dayly
 
-- [为什么在 `main` 和 Junit `test`  方法中获取路径会出现不同的结果？]()
+- [为什么在 `main` 和 Junit `test`  方法中获取路径会出现不同的结果？](./docs/dayly/index.md)
 
 ## Test 
 
