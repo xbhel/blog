@@ -18,6 +18,8 @@ $ groups xbhel
 #> xbhel root
 
 # 重新指定用户组，可利用此删除多余组
+# -G, --groups 指定补充组列表
+# -g 指定用户所属的主用户组，用户初始化登录的组
 usermod -G xbhel xbhel
 
 # 再次查看用户所在组
