@@ -127,34 +127,34 @@ public class StatefulFlatMap extends RichFlatMapFunction<String, String> {
 为上述类编写测试的难点是模拟配置(Configuration)以及应用程序的运行时上下文(RuntimeContext)，Flink 提供了一系列 `TestHarness` 测试工具类，以便让用户无需自己创建 mock 对象。使用 `KeyedOperatorHarness` 进行测试。测试案例如下：
 
 ```java
-@Test
-void testFlatMap() throws Exception {
-    StatefulFlatMap statefulFlatMap = new StatefulFlatMap();
-    // OneInputStreamOperatorTestHarness takes the input and output types as type parameters
-    OneInputStreamOperatorTestHarness<String, String> testHarness =
-        // KeyedOneInputStreamOperatorTestHarness takes three arguments:
-        //   Flink operator object, key selector and key type
-        new KeyedOneInputStreamOperatorTestHarness<>(
-        new StreamFlatMap<>(statefulFlatMap), x -> "1", Types.STRING);
-    testHarness.open();
-
-    //test first record
-    testHarness.processElement("world", 10);
-    ValueState<String> previousInput =
-        statefulFlatMap.getRuntimeContext().getState(
-        new ValueStateDescriptor<>("previousInput", Types.STRING));
-    String stateValue = previousInput.value();
-    assertThat(testHarness.extractOutputStreamRecords())
-        .isEqualTo(Lists.newArrayList(new StreamRecord<>("hello world", 10)));
-    assertThat(stateValue).isEqualTo("world");
-
-    //test second record
-    testHarness.processElement("parallel", 20);
-    assertThat(testHarness.extractOutputStreamRecords())
-        .isEqualTo(Lists.newArrayList(
-            new StreamRecord<>("hello world", 10),
-            new StreamRecord<>("hello parallel world", 20)));
-    assertThat(stateValue).isEqualTo("parallel");
+void testFlatMap() throws Exception {  
+    StatefulFlatMap statefulFlatMap = new StatefulFlatMap();  
+    // OneInputStreamOperatorTestHarness 有两个泛型参数：第一个是输入类型；第二个是输出类型  
+    OneInputStreamOperatorTestHarness<String, String> testHarness =  
+            // 注意我们要使用 KeyedOneInputStreamOperatorTestHarness           
+            // 因为我们使用了 ValueState，该状态只能在 KeyedStream 上使用
+            // KeyedOneInputStreamOperatorTestHarness 需要三个参数：测试的算子对象；key selector；key 的类型  
+            new KeyedOneInputStreamOperatorTestHarness<>(  
+                    new StreamFlatMap<>(statefulFlatMap), x -> "1", Types.STRING);  
+    testHarness.open();  
+  
+    //test first record  
+    testHarness.processElement("world", 10);  
+    ValueState<String> previousInput =  
+            statefulFlatMap.getRuntimeContext().getState(  
+                    new ValueStateDescriptor<>("previousInput", Types.STRING));  
+    String stateValue = previousInput.value();  
+    assertThat(testHarness.extractOutputStreamRecords())  
+            .isEqualTo(Lists.newArrayList(new StreamRecord<>("hello world", 10)));  
+    assertThat(stateValue).isEqualTo("world");  
+  
+    //test second record  
+    testHarness.processElement("parallel", 20);  
+    assertThat(testHarness.extractOutputStreamRecords())  
+            .isEqualTo(Lists.newArrayList(  
+                    new StreamRecord<>("hello world", 10),  
+                    new StreamRecord<>("hello parallel world", 20)));  
+    assertThat(stateValue).isEqualTo("parallel");  
 }
 ```
 
