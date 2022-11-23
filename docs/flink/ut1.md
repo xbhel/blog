@@ -200,7 +200,7 @@ void testProcessElement() throws Exception {
         new KeyedProcessOperator<>(myProcessFunction), x -> "1", Types.STRING);
     // Function time is initialized to 0
     testHarness.open();
-    // 区别 10 是与元素关联的时间戳而不一定是 “当前时间”，当注册的是处理时间 timer 就不是。
+    // 注意区分 10 是与元素关联的时间戳而不是 “当前时间”
     testHarness.processElement("world", 10);
 
     assertThat(testHarness.extractOutputStreamRecords())
