@@ -34,7 +34,7 @@ void testIncrement() throws Exception {
 }
 ```
 
-类似地，一个使用 `org.apache.flink.util.Collector`（如：`FlatMapFunction` ,`ProcessFunction`）的 UDF 可以通过提供一个模拟对象来替代真实的 `Collector` 对象去轻松的进行测试。
+类似地，一个使用 `org.apache.flink.util.Collector`（如：`FlatMapFunction` ，`ProcessFunction`）的 UDF 可以通过提供一个模拟对象来替代真实的 `Collector` 对象去轻松的进行测试。
 
 一个具有和 `IncrementMapFunction` 同样的功能 `FlatMapFunction` 测试案例如下：
 
@@ -77,35 +77,81 @@ void testIncrement(@Mock Collector<Long> collector) throws Exception {
 让我们实现一个简单的有状态的 `FlatMapFunction` 算子：
 
 ```java
-public class StatefulFlatMapFunction extends RichFlatMapFunction<Long, Long> {
-
-    private static final long serialVersionUID = 1L;
-
-    private ValueState<Long> previousOutput;
-
-    @Override
-    public void open(Configuration parameters) throws Exception {
-        previousOutput = getRuntimeContext().getState(
-                new ValueStateDescriptor<>("previousOutput", Types.LONG)
-        );
-    }
-
-    @Override
-    public void flatMap(Long value, Collector<Long> out) throws Exception {
-        Long largerValue = value;
-        if(previousOutput.value() != null) {
-            largerValue = Math.max(previousOutput.value(), value);
-        }
-        previousOutput.update(largerValue);
-        out.collect(largerValue);
-    }
+public class StatefulFlatMapFunction implements CheckpointedFunction, FlatMapFunction<Long, Long> {  
+  
+    private static final long serialVersionUID = 1L;  
+    private static final ListStateDescriptor<Long> MAX_VALUE_STATE_DESC =  
+            new ListStateDescriptor<>("maxValueState", Types.LONG);  
+  
+    private transient ListState<Long> maxValueState;  
+  
+    @Override  
+    public void flatMap(Long value, Collector<Long> out) throws Exception {  
+        Long maxValue = value;  
+        Iterable<Long> longIterable = maxValueState.get();  
+        if (longIterable != null) {  
+            for (Long preMaxValue: longIterable) {  
+                maxValue = Math.max(preMaxValue, maxValue);  
+            }  
+        }  
+        maxValueState.update(Lists.newArrayList(maxValue));  
+        out.collect(maxValue);  
+    }  
+  
+    @Override  
+    public void snapshotState(FunctionSnapshotContext context) throws Exception {  
+        // do nothing  
+    }  
+  
+    @Override  
+    public void initializeState(FunctionInitializationContext context) throws Exception {  
+        maxValueState = context.getOperatorStateStore().getListState(MAX_VALUE_STATE_DESC);  
+    }  
 }
 ```
 
 让我们看看如何使用 `test harnesses` 为其编写测试案例：
 
 ```java
-
+class StatefulFlatMapFunctionTest {  
+    private OneInputStreamOperatorTestHarness<Long, Long> testHarness;  
+    private StatefulFlatMapFunction statefulFlatMapFunction;  
+  
+    @BeforeEach  
+    void setupTestHarness() throws Exception {  
+        // 实例化 UDF        
+        statefulFlatMapFunction = new StatefulFlatMapFunction();  
+        // 将 UDF 包装到相应的 TestHarness 中  
+        testHarness = new OneInputStreamOperatorTestHarness<>(new StreamFlatMap<>(statefulFlatMapFunction));  
+        // 可选地配置执行环境  
+        testHarness.getExecutionConfig().setAutoWatermarkInterval(50);  
+        // 打开 testHarness(也会调用 RichFunctions 的 open 方法)  
+        testHarness.open();  
+    }  
+  
+    @Test  
+    void testingStatefulFlatMapFunction() throws Exception {  
+        // 推送元素及与该元素关联的时间戳至算子中  
+        testHarness.processElement(2L, 100L);  
+  
+        // 通过使用水印推进算子的事件时间来触发事件时间 timer     
+        testHarness.processWatermark(100L);  
+  
+        // 通过直接提前算子的处理时间来触发处理时间 timer        
+        testHarness.setProcessingTime(100L);  
+  
+        // 获取输出列表用于断言  
+        // 在 flink 中水印（watermark）就是通过推送一条记录实现的，这条记录只有时间戳。
+        assertThat(testHarness.getOutput())  
+            .isEqualTo(Queues.newConcurrentLinkedQueue(IterableUtil.iterable(  
+                        new StreamRecord<>(2L, 100L),  
+                        new Watermark(100L)  
+                )));  
+  
+        // 获取侧边流的输出用于断言（只在 ProcessFunction 可以）  
+        // assertThat(testHarness.getSideOutput(new OutputTag<>("invalidRecords")), hasSize(0))  
+    }  
+}
 ```
 
 

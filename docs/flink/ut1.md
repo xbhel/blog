@@ -103,7 +103,7 @@ public class StatefulFlatMap extends RichFlatMapFunction<String, String> {
 
     private static final long serialVersionUID = 1L;
 
-    private ValueState<String> previousInput;
+    private transient ValueState<String> previousInput;
 
     @Override
     public void open(Configuration parameters) throws Exception {
