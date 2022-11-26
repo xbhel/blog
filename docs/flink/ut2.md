@@ -54,10 +54,10 @@ void testIncrement(@Mock Collector<Long> collector) throws Exception {
 
 对使用了托管状态（state）或定时器（timer）的 UDF 的功能进行测试难度相对大一些，因为它涉及测试用户代码和 Flink 运行时（runtime）之间的交互。为此，Flink 提供了一系列叫做 `test harnesses` 的测试工具，能够帮助我们测试此类用户定义的函数以及自定义算子：
 
-- `OneInputStreamOperatorTestHarness` （用于基于 `DataStreamS` 的算子）
-- `KeyedOneInputStreamOperatorTestHarness`（用于基于 `KeyedStreamS` 的算子）
-- `TwoInputStreamOperatorTestHarness`（用于基于两个 `DataStreamS` 的 `ConnectedStreamS` 的算子）
-- `KeyedTwoInputStreamOperatorTestHarness`（用于基于两个 `KeyedStreamS` 的 `ConnectedStreamS` 的算子）
+- `OneInputStreamOperatorTestHarness` （用于基于 `DataStream` 的算子）
+- `KeyedOneInputStreamOperatorTestHarness`（用于基于 `KeyedStream` 的算子）
+- `TwoInputStreamOperatorTestHarness`（用于基于两个 `DataStream` 的 `ConnectedStream` 的算子）
+- `KeyedTwoInputStreamOperatorTestHarness`（用于基于两个 `KeyedStream` 的 `ConnectedStream` 的算子）
 
 要使用这些 `test harnesses` 你需要引入额外的依赖，参考 [Flink 单元测试(一)](ut1.md)。
 
@@ -72,7 +72,7 @@ void testIncrement(@Mock Collector<Long> collector) throws Exception {
 </dependency>
 ```
 
-现在，你可以使用 `test harnesses` 将输入数据和水印（watermarks）推送到用户定义的函数或自定义算子中，并控制处理时间和对算子的输出进行最终的断言（包括侧边流输出）。
+现在，你可以使用 `test harnesses` 将输入数据和水印（watermarks）推送到用户定义的函数（UDF）或自定义算子中，并控制处理时间和对算子的输出进行最终的断言（包括侧边流输出）。
 
 让我们实现一个简单的有状态的 `FlatMapFunction` 算子：
 
@@ -114,13 +114,13 @@ public class StatefulFlatMapFunction implements CheckpointedFunction, FlatMapFun
 
 ```java
 class StatefulFlatMapFunctionTest {  
+    
     private OneInputStreamOperatorTestHarness<Long, Long> testHarness;  
-    private StatefulFlatMapFunction statefulFlatMapFunction;  
   
     @BeforeEach  
     void setupTestHarness() throws Exception {  
         // 实例化 UDF        
-        statefulFlatMapFunction = new StatefulFlatMapFunction();  
+        StatefulFlatMapFunction statefulFlatMapFunction = new StatefulFlatMapFunction();  
         // 将 UDF 包装到相应的 TestHarness 中  
         testHarness = new OneInputStreamOperatorTestHarness<>(new StreamFlatMap<>(statefulFlatMapFunction));  
         // 可选地配置执行环境  
@@ -129,42 +129,90 @@ class StatefulFlatMapFunctionTest {
         testHarness.open();  
     }  
   
-    @Test  
-    void testingStatefulFlatMapFunction() throws Exception {  
-        // 推送元素及与该元素关联的时间戳至算子中  
-        testHarness.processElement(2L, 100L);  
-  
-        // 通过使用水印推进算子的事件时间来触发事件时间 timer     
-        testHarness.processWatermark(100L);  
-  
-        // 通过直接提前算子的处理时间来触发处理时间 timer        
-        testHarness.setProcessingTime(100L);  
-  
-        // 获取输出列表用于断言  
-        // 在 flink 中水印（watermark）就是通过推送一条记录实现的，这条记录只有时间戳。
-        assertThat(testHarness.getOutput())  
-            .isEqualTo(Queues.newConcurrentLinkedQueue(IterableUtil.iterable(  
-                        new StreamRecord<>(2L, 100L),  
-                        new Watermark(100L)  
-                )));  
-  
-        // 获取侧边流的输出用于断言（只在 ProcessFunction 可以）  
-        // assertThat(testHarness.getSideOutput(new OutputTag<>("invalidRecords")), hasSize(0))  
-    }  
+    @Test
+	void testingStatefulFlatMapFunction() throws Exception {  
+	    // 推送元素及与该元素关联的时间戳至算子中 
+	    testHarness.processElement(2L, 100L);   
+	    // 通过使用水印推进算子的事件时间来触发事件时间 timer 
+	    testHarness.processWatermark(100L);  
+	    // 通过直接提前算子的处理时间来触发处理时间 timer 
+	    testHarness.setProcessingTime(100L); 
+        
+	    // 获取输出列表用于断言（包含 watermark）  
+	    // 在 flink 中水印（watermark）就是通过推送一条记录实现的，这条记录只有时间戳。  
+	    assertThat(testHarness.getOutput().toArray())  
+            .isEqualTo(Arrays.array(  
+                    new StreamRecord<>(2L, 100L),  
+                    new Watermark(100L)  
+            ));  
+        
+        // 推送元素及与该元素关联的时间戳至算子中 
+        testHarness.processElement(6L, 110);
+        
+        // 获取输出列表用于断言，直接获取值 
+        assertThat(testHarness.extractOutputValues())  
+            .isEqualTo(Lists.newArrayList(2L, 6L));  
+        
+        // 获取 operator 状态用于断言
+        ListState<Long> maxValueState = testHarness.getOperator()
+                .getOperatorStateBackend()
+                .getListState(new ListStateDescriptor<>("maxValueState", Types.LONG));
+        assertThat(maxValueState.get()).isEqualTo(Lists.newArrayList(6L));
+            
+        // 获取侧边流的输出用于断言（仅在 ProcessFunction 可用）
+        //assertThat(testHarness.getSideOutput(new OutputTag<>("invalidRecords")), hasSize(0))  
+	}    
 }
 ```
 
+接下我们看一下如何为同样逻辑的 `KeyedStream` 算子进行测试。
 
+对于 `KeyedStream` 算子的测试，我们可以通过 `KeyedOneInputStreamOperatorTestHarness` 和 `KeyedTwoInputStreamOperatorTestHarness` 实例，对此我们需要额外提供 `KeySelector` 和 `Key` 的类型去创建它们。如下：
 
+```java
+class KeyedStatefulFlatMapFunctionTest {
 
+    private OneInputStreamOperatorTestHarness<Long, Long> testHarness;
+    private KeyedStatefulFlatMapFunction keyedStatefulFlatMapFunction;
 
+    @BeforeEach
+    void setupTestHarness() throws Exception {
+        // 实例化 UDF
+        keyedStatefulFlatMapFunction = new KeyedStatefulFlatMapFunction();
+        // 将 UDF 包装到相应的 TestHarness 中
+        testHarness = new KeyedOneInputStreamOperatorTestHarness<>(
+                new StreamFlatMap<>(keyedStatefulFlatMapFunction), (el) -> "1", Types.STRING);
+        // 打开 testHarness(也会调用 RichFunctions 的 open 方法)
+        testHarness.open();
+    }
 
+    @Test
+    void testingStatefulFlatMapFunction() throws Exception {
+        // 推送元素及与该元素关联的时间戳至算子中
+        testHarness.processElement(2L, 100L);
+        
+        // 获取输出列表用于断言
+        assertThat(testHarness.extractOutputValues())
+                .isEqualTo(Lists.newArrayList(2L));
+        
+		// 推送元素及与该元素关联的时间戳至算子中 
+        testHarness.processElement(6L, 110L);
+        
+        // 获取 keyed 状态用于断言，keyed 状态我们可以直接通过算子的 getRuntimeContext 获取
+        // 当然也可以使用 testHarness 获取
+        ListState<Long> maxValueState = keyedStatefulFlatMapFunction.getRuntimeContext()
+                .getListState(new ListStateDescriptor<>("maxValueState", Types.LONG));
+        assertThat(maxValueState.get()).isEqualTo(Lists.newArrayList(6L));
+    }
+}
+```
 
+更多关于 `test harnesses` 的使用案例可以在[ Flink 代码仓库](https://github.com/apache/flink/tree/master/flink-streaming-java/src/test/java/org/apache/flink/streaming/runtime/operators/windowing)找到：
 
+- `org.apache.flink.streaming.runtime.operators.windowing.WindowOperatorTest` 是一个测试基于处理或事件时间的算子和用户定义函数（UDF）的很好例子。
 
-
-
-
+>[!note]
+>请注意，`AbstractStreamOperatorTestHarness` 及其派生类目前不是公共 API 的一部分，可能会发生变化.。
 
 
 

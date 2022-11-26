@@ -20,7 +20,7 @@
 
 1. 安装 prettier 模块：
 ```bash
-$ pnpm install prettier --save-dev
+$ pnpm install --save-dev prettier 
 ```
 
 2. 创建 prettier 配置文件 *prettier.config.cjs* ：
@@ -69,4 +69,18 @@ module.exports = {
 **/*.sh
 
 /public/*
+```
+
+### 集成 eslint
+
+1. 安装 eslint 相关模块：
+```bash
+# eslint 整合 vue 需要的模块
+$ pnpm install --save-dev eslint eslint-plugin-vue
+# eslint 整合 ts 需要的模块
+$ pnpm install --save-dev @typescript-eslint/parser @typescript-eslint/eslint-plugin 
+# 解决 eslint 和 prettier 规则冲突需要的模块 
+$ pnpm install --save-dev eslint-config-prettier eslint-plugin-prettier
+# 支持 eslint 配置类型提示
+$ pnpm install --save-dev eslint-define-config 
 ```
