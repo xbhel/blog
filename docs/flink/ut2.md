@@ -165,9 +165,9 @@ class StatefulFlatMapFunctionTest {
 }
 ```
 
-接下我们看一下如何为同样逻辑的 `KeyedStream` 算子进行测试。
+接下来我们看一下如何为同样逻辑的 `KeyedStream` 算子进行测试。
 
-对于 `KeyedStream` 算子的测试，我们可以通过 `KeyedOneInputStreamOperatorTestHarness` 和 `KeyedTwoInputStreamOperatorTestHarness` 实例，对此我们需要额外提供 `KeySelector` 和 `Key` 的类型去创建它们。如下：
+对于 `KeyedStream` 算子的测试，我们可以通过 `KeyedOneInputStreamOperatorTestHarness` 和 `KeyedTwoInputStreamOperatorTestHarness`，对此我们需要额外提供 `KeySelector` 和 `Key` 的类型去创建它们。如下：
 
 ```java
 class KeyedStatefulFlatMapFunctionTest {
@@ -180,6 +180,7 @@ class KeyedStatefulFlatMapFunctionTest {
         // 实例化 UDF
         keyedStatefulFlatMapFunction = new KeyedStatefulFlatMapFunction();
         // 将 UDF 包装到相应的 TestHarness 中
+        // 除了传递 UDF 实例，还需要 KeySelector, Key 的类型
         testHarness = new KeyedOneInputStreamOperatorTestHarness<>(
                 new StreamFlatMap<>(keyedStatefulFlatMapFunction), (el) -> "1", Types.STRING);
         // 打开 testHarness(也会调用 RichFunctions 的 open 方法)
@@ -207,16 +208,56 @@ class KeyedStatefulFlatMapFunctionTest {
 }
 ```
 
-更多关于 `test harnesses` 的使用案例可以在[ Flink 代码仓库](https://github.com/apache/flink/tree/master/flink-streaming-java/src/test/java/org/apache/flink/streaming/runtime/operators/windowing)找到：
+更多关于 `test harnesses` 的使用案例可以在 [Flink 代码仓库](https://github.com/apache/flink/tree/master/flink-streaming-java/src/test/java/org/apache/flink/streaming/runtime/operators/windowing)找到：
 
 - `org.apache.flink.streaming.runtime.operators.windowing.WindowOperatorTest` 是一个测试基于处理或事件时间的算子和用户定义函数（UDF）的很好例子。
 
 >[!note]
 >请注意，`AbstractStreamOperatorTestHarness` 及其派生类目前不是公共 API 的一部分，可能会发生变化.。
 
+### 单元测试 ProcessFunction
 
+鉴于它的重要性，除了能够直接使用前面提到的 `test harnesses` 对 `ProcessFunction` 进行测试之外，Flink 还提供了一个名为 `ProcessFunctionTestHarnesses` 的测试工具工厂类，以便简化测试工具（`test harness`）的实例化，让我们看一个例子：
 
+```java
+public class PassThroughProcessFunction extends ProcessFunction<Integer, Integer> {  
+  
+    private static final long serialVersionUID = 1L;  
+  
+    @Override  
+    public void processElement(Integer value,  
+                               ProcessFunction<Integer, Integer>.Context context,  
+                               Collector<Integer> out) throws Exception {  
+        out.collect(value);  
+    }  
+}
+```
 
+使用 `ProcessFunctionTestHarnesses` 对  `ProcessFunction` 进行测试非常简单，传递合适的参数并验证输出：
 
+```java
+class PassThroughProcessFunctionTest {  
+  
+    @Test
+    void testPassThrough() throws Exception {
+        // 实例化 UDF
+        PassThroughProcessFunction processFunction = new PassThroughProcessFunction();
+
+        // 包装 UDF 至相应的 TestHarness 中
+        OneInputStreamOperatorTestHarness<Integer, Integer> testHarness =
+                ProcessFunctionTestHarnesses.forProcessFunction(processFunction);
+
+        // 推送元素及与该元素关联的时间戳至算子中
+        testHarness.processElement(1, 10);
+
+        // 获取输出并断言
+        assertThat(testHarness.extractOutputValues())
+                .isEqualTo(Collections.singletonList(1));
+    }
+  
+}
+```
+
+有关如何使用 `ProcessFunctionTestHarnesses` 来测试不同类型的 `ProcessFunction`（如 `KeyedProcessFunction`, `KeyedCoProcessFunction`, `BroadcastProcessFunction`）的更多示例，可以查看 [Flink 代码仓库](https://github.com/apache/flink/tree/master/flink-streaming-java/src/test/java/org/apache/flink/streaming/util) 的 `ProcessFunctionTestHarnessesTest`。
 
 
