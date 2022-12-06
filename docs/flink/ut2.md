@@ -260,4 +260,59 @@ class PassThroughProcessFunctionTest {
 
 有关如何使用 `ProcessFunctionTestHarnesses` 来测试不同类型的 `ProcessFunction`（如 `KeyedProcessFunction`, `KeyedCoProcessFunction`, `BroadcastProcessFunction`）的更多示例，可以查看 [Flink 代码仓库](https://github.com/apache/flink/tree/master/flink-streaming-java/src/test/java/org/apache/flink/streaming/util) 的 `ProcessFunctionTestHarnessesTest`。
 
+## 测试 Flink Job
 
+### JUnit 4 Rule MiniClusterWithClientResource
+
+在 JUnit 4 中 Apache Flink 提供了一个名为  `MiniClusterWithClientResource` 的 Rule（规则），用于在本地嵌入一个迷你集群，以便测试完整的 Job。
+
+让我们以上面提到的 `IncrementMapFunction` 为例，在本地 Flink 集群测试一个使用 `MapFunction` 的简单 Job：
+
+```java
+public class JUnit4ExampleIntegrationTest {  
+  
+    @ClassRule  
+    public static MiniClusterWithClientResource flinkCluster = new MiniClusterWithClientResource(  
+            new MiniClusterResourceConfiguration.Builder()  
+                    .setNumberSlotsPerTaskManager(2)  
+                    .setNumberTaskManagers(1)  
+                    .build());  
+  
+    @Test  
+    public void testIncrementPipeline() throws Exception {  
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();  
+  
+        // configure your test environment  
+        env.setParallelism(2);  
+  
+        // values are collected in a static variable  
+        CollectSink.values.clear();  
+  
+        // create a stream of custom elements and apply transformations  
+        env.fromElements(1L, 21L, 22L)  
+                .map(new IncrementMapFunction())  
+                .addSink(new CollectSink());  
+  
+        // execute  
+        env.execute();  
+  
+        // verify your results  
+        assertTrue(CollectSink.values.containsAll(Lists.list(2L, 22L, 23L)));  
+    }  
+  
+    // create a testing sink  
+    private static class CollectSink implements SinkFunction<Long> {  
+  
+        // must be static  
+        public static final List<Long> values = Collections.synchronizedList(new ArrayList<>());  
+  
+        @Override  
+        public void invoke(Long value, SinkFunction.Context context) throws Exception {  
+            values.add(value);  
+        }  
+    }  
+}
+```
+
+
+### JUnit 5  MiniClusterExtension
