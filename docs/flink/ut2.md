@@ -314,5 +314,13 @@ public class JUnit4ExampleIntegrationTest {
 }
 ```
 
+关于使用 `MiniClusterWithClientResource` 集成测试的几点说明：
+
+- 为了避免在测试时拷贝整个 job pipeline 的代码，你需要将你生产代码的 source 和 sink 设计成可插拔的，以便在测试中注入特殊的测试的 source 和 测试的 sink。
+- 这里使用 `CollectSink` 中的静态变量，是因为 Flink 在将所有算子分布到整个集群之前先对其进行了序列化，解决此问题的方法之一是与本地 Flink 迷你集群通过实例化算子的静态变量进行通信，或者，你可以使用测试的sink 将数据写入临时目录中的文件。
+- 如果你的 job 使用了事件时间 timer ，你可以实现自定义的并行 source 函数来发送水印（watermark）。
+- 建议始终使用 `parallelsim > 1` 的方式在本地测试 pipeline，以便发现那些只有 pipeline 在并行执行时才会出现的 bug。
+- 优先使用 `@ClassRule` 而不是 `@Rule`，这样多个测试能够共享同一个 Flink 集群，这样做能够节约大量的时间，因为 Flink 集群的启动和关闭通常占据了实际测试的执行时间。
+- 如果你的 pipeline 包含自定义状态处理，则可以通过启用 checkpoint 并在迷你集群中重新启动作业来测试其正确性，为此，你需要在 pipeline 的（仅在测试使用的）用户自定义函数中抛出异常来触发失败。
 
 ### JUnit 5  MiniClusterExtension
