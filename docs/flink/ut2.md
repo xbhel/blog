@@ -324,3 +324,46 @@ public class JUnit4ExampleIntegrationTest {
 - 如果你的 pipeline 包含自定义状态处理，则可以通过启用 checkpoint 并在迷你集群中重新启动作业来测试其正确性，为此，你需要在 pipeline 的（仅在测试使用的）用户自定义函数中抛出异常来触发失败。
 
 ### JUnit 5  MiniClusterExtension
+
+在 JUnit 5 中已不再支持 `@ClassRule` 和 `@Rule`，分别使用 `@RegisterExtension` 和 `@ExtendWith` 去替换。
+
+在 JUnit 5 中，Flink 提供了 `MiniClusterExtension` 的扩展用于在本地启动一个 Flink 集群并注册相应的执行环境，使用 JUnit 5 编写  `IncrementMapFunction` Job 的测试用例如下：
+
+```java
+@ExtendWith(MiniClusterExtension.class)
+class JUnit5ExampleIntegrationTest {
+	@Test
+	void testIncrementPipeline() {
+		ExecutionEnvironment execEnv = ExecutionEnvironment.getExecutionEnvironment();
+		//...omit
+	}
+}
+```
+
+如果需要调整集群的配置，你可以使用 `@RegisterExtension` ：
+```java
+class JUnit5ExampleIntegrationTest {
+
+	@RegisterExtension
+	public static final MiniClusterExtension MINI_CLUSTER_RESOURCE = new 
+		MiniClusterExtension(
+			new MiniClusterResourceConfiguration.Builder()
+				 .setNumberTaskManagers(1)
+				 .setConfiguration(new Configuration())
+				 .build());
+		
+	@Test
+	void testIncrementPipeline() {
+		ExecutionEnvironment execEnv = ExecutionEnvironment.getExecutionEnvironment();
+		//...omit
+	}
+}
+```
+
+## 总结
+
+本节我们展示了如何在 Apache Flink 中为 **无状态、有状态和时间感知（timer）** 的算子编写单元测试，以及如何为 Job 进行集成测试。
+
+👋 [访问 GitHub 获取源代码](https://github.com/xbhel/flink-starter/tree/main/flink-unit-test)。
+
+
