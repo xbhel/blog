@@ -57,7 +57,7 @@ Runnable runnable = () -> {...};
 // 单个参数无返回值
 Consumer<String> consumer = (str) -> System.out.println(str);
 
-// 多个参数
+// 多个参数无返回值
 BiConsumer<String, String> biConsumer = (s1, s2) -> {
 	System.out.println(s1);
 	System.out.println(s2);
@@ -66,9 +66,12 @@ BiConsumer<String, String> biConsumer = (s1, s2) -> {
 // 无参有返回值
 Supplier<String> supplier = () -> “hello lambda!“;
 
-// 有参有返回值
-Function<Integer, String> func = (i) -> {
+// 单个参数有返回值
+Function<Integer, String> func = i -> {
 	System.out.println(i);
 	return i + "";
 }
+
+// 多个参数有返回值
+BiFunction<Integer, Integer, Integer> add = (x, y) -> x + y;
 ```
