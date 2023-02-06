@@ -77,10 +77,16 @@ module.exports = {
 ```bash
 # eslint 整合 vue 需要的模块
 $ pnpm install --save-dev eslint eslint-plugin-vue
+
 # eslint 整合 ts 需要的模块
 $ pnpm install --save-dev @typescript-eslint/parser @typescript-eslint/eslint-plugin 
-# 解决 eslint 和 prettier 规则冲突需要的模块 
+
+# 通常 linter 除了包含代码质量检测的规则外，也会包含一些文体格式的规则，这些规则会和 prettier 冲突
+# 解决 eslint 和 prettier 规则冲突需要的模块
+# https://prettier.io/docs/en/integrating-with-linters.html
 $ pnpm install --save-dev eslint-config-prettier eslint-plugin-prettier
-# 支持 eslint 配置类型提示
+
+# 支持 eslint 配置的类型提示
 $ pnpm install --save-dev eslint-define-config 
 ```
+2. 
